@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import hmac
 
 from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad, unpad
@@ -14,6 +15,13 @@ def derive_key(token: str) -> bytes:
     return hashlib.pbkdf2_hmac(
         "sha256", token.encode("utf-8"), PBKDF2_SALT, PBKDF2_ITERATIONS, dklen=32
     )
+
+
+AUTH_MSG = b"CraftLink.Handshake.Auth.v1"
+
+
+def handshake_auth(token: str) -> str:
+    return hmac.new(derive_key(token), AUTH_MSG, hashlib.sha256).hexdigest()
 
 
 def encrypt(key: bytes, text: str) -> str:

@@ -1,10 +1,11 @@
 import asyncio
+import hmac
 import json
 
 import websockets
 
 from core import ModManager, data
-from crypto import decrypt, derive_key
+from crypto import decrypt, derive_key, handshake_auth
 from logger import Logger
 
 HANDSHAKE_TIMEOUT = 10
@@ -71,10 +72,11 @@ class Connection:
 
 
 class CraftLinkServer:
-    def __init__(self, host: str, port: int, mods: ModManager):
+    def __init__(self, host: str, port: int, mods: ModManager, token: str):
         self.host = host
         self.port = port
         self.mods = mods
+        self.token = token
         self.log = Logger()
 
     async def serve_forever(self):
@@ -93,8 +95,7 @@ class CraftLinkServer:
             hs = {}
         gdndzzk = hs.get("GDNDZZK")
         version = hs.get("version")
-        token = hs.get("token")
-        if not isinstance(gdndzzk, str) or not isinstance(version, str) or not isinstance(token, str):
+        if not isinstance(gdndzzk, str) or not isinstance(version, str):
             self.log.warn(f"握手失败,协议不匹配,请求来自{host}")
             await ws.close()
             return
@@ -106,8 +107,13 @@ class CraftLinkServer:
             self.log.warn(f"握手失败,版本不匹配,请求来自{host}")
             await ws.close()
             return
+        auth = hs.get("auth")
+        if not isinstance(auth, str) or not hmac.compare_digest(auth, handshake_auth(self.token)):
+            self.log.warn(f"{host} 密钥验证失败")
+            await ws.close()
+            return
         self.log.info(f"{host} 握手成功 ua={hs.get('ua')}")
-        conn = Connection(self, ws, host, derive_key(token))
+        conn = Connection(self, ws, host, derive_key(self.token))
         recv_task = asyncio.create_task(conn.recv_loop())
         ping_task = asyncio.create_task(conn.ping_loop())
         done, pending = await asyncio.wait({recv_task, ping_task}, return_when=asyncio.FIRST_COMPLETED)
