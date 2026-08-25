@@ -63,6 +63,40 @@ If any condition fails, the extension is not registered and a warning is logged:
 | `注册失败,错误的info` (registration failed, invalid info) | modsInfo is missing fields |
 | `注册失败,版本不匹配` (registration failed, version mismatch) | version is not api_v1 |
 
+## Dependencies and Runtime
+
+Each extension runs in its own subprocess, fully isolated from the host and from other extensions. An extension may declare its third-party dependencies:
+
+```
+mods/
+└── my_mod/
+    ├── main.py
+    └── requirements.txt   # optional, standard pip format
+```
+
+### Automatic dependency installation
+
+- For extensions with a `requirements.txt`, the framework creates a dedicated venv under `.venvs/<extension-dir>/` (sibling of `mods/`) and installs the dependencies at startup; the venv is rebuilt automatically when the file changes
+- The `mods/` directory is treated as read-only; all venvs and caches live under `.venvs/` (orphaned venvs are cleaned up on the next startup after their extension is removed)
+- Extensions without a `requirements.txt` run on the host interpreter, unchanged
+- A failed install (bad package name, network down) only skips that extension; the server still starts
+- Pass `--no-auto-install` to disable auto-installation; extensions declaring dependencies are then skipped with a warning
+
+### pip mirror selection
+
+When installing, the framework reads mirror candidates from `mirrors.json` in the project root (by default: official PyPI, Aliyun/Tencent/Huawei clouds, and university mirrors — TUNA, USTC, PKU, NJU, ZJU, SJTU, BFSU, HUST, JLU, SUSTech, NJTech, etc.), probes them concurrently, and picks the fastest. The result is cached for 24 hours (`.venvs/.mirror.json`); editing `mirrors.json` invalidates it immediately.
+
+Priority: `--index-url` argument > `PIP_INDEX_URL` environment variable > auto-probe > pip default. Set `mirrors.json` to an empty array `[]` to disable probing.
+
+> Note: automatic mirrors imply trusting third-party mirror integrity; for security-sensitive deployments pin the official index via `--index-url`.
+
+### Runtime model and limitations
+
+- A crashing or killed extension only affects itself; the framework logs it and keeps running
+- Events are delivered as JSON, so `evt.d` must be JSON-serializable
+- `print` output inside an extension is redirected to framework logs and never breaks inter-process communication
+- Async callbacks execute sequentially within each extension's own process
+
 ## Receiving Events
 
 Events are delivered to `craftLinkEvent` as a `data` instance:

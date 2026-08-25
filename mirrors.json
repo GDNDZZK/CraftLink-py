@@ -1,0 +1,17 @@
+[
+  "https://pypi.org/simple",
+  "https://mirrors.aliyun.com/pypi/simple",
+  "https://mirrors.cloud.tencent.com/pypi/simple",
+  "https://mirrors.huaweicloud.com/repository/pypi/simple",
+  "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple",
+  "https://mirrors.ustc.edu.cn/pypi/simple",
+  "https://mirrors.pku.edu.cn/pypi/simple",
+  "https://mirror.nju.edu.cn/pypi/web/simple",
+  "https://mirrors.zju.edu.cn/pypi/web/simple",
+  "https://mirror.sjtu.edu.cn/pypi/web/simple",
+  "https://mirrors.bfsu.edu.cn/pypi/web/simple",
+  "https://mirrors.hust.edu.cn/pypi/web/simple",
+  "https://mirrors.jlu.edu.cn/pypi/simple",
+  "https://mirrors.sustech.edu.cn/pypi/simple",
+  "https://mirrors.njtech.edu.cn/pypi/web/simple"
+]

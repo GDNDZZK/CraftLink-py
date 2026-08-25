@@ -1,6 +1,7 @@
 import asyncio
 import hmac
 import json
+import signal
 
 import websockets
 
@@ -80,9 +81,23 @@ class CraftLinkServer:
         self.log = Logger()
 
     async def serve_forever(self):
-        async with websockets.serve(self._handler, self.host, self.port):
-            self.log.info(f"服务器已启动 ws://{self.host}:{self.port}")
-            await asyncio.Future()
+        loop = asyncio.get_running_loop()
+        stop = asyncio.Event()
+
+        def _fallback_stop(*_):
+            loop.call_soon_threadsafe(stop.set)
+
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                loop.add_signal_handler(sig, stop.set)
+            except NotImplementedError:
+                signal.signal(sig, _fallback_stop)
+        server = await websockets.serve(self._handler, self.host, self.port)
+        self.log.info(f"服务器已启动 ws://{self.host}:{self.port}")
+        await stop.wait()
+        server.close()
+        await server.wait_closed()
+        self.log.info("服务器已停止")
 
     async def _handler(self, ws, path=None):
         host = ws.remote_address[0] if ws.remote_address else "unknown"

@@ -77,10 +77,24 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--token", default="CraftLink")
+    parser.add_argument("--no-auto-install", action="store_true",
+                        help="禁用插件依赖自动安装")
+    parser.add_argument("--venv-dir", default=None,
+                        help="插件 venv 存放目录 (默认: mods 同级的 .venvs)")
+    parser.add_argument("--index-url", default=None,
+                        help="强制使用的 pip 镜像源")
     args = parser.parse_args()
-    mods = ModManager(MODS_DIR)
+    mods = ModManager(
+        MODS_DIR,
+        venv_dir=args.venv_dir,
+        auto_install=not args.no_auto_install,
+        index_url=args.index_url,
+    )
     mods.load_all()
-    asyncio.run(CraftLinkServer(args.host, args.port, mods, args.token).serve_forever())
+    try:
+        asyncio.run(CraftLinkServer(args.host, args.port, mods, args.token).serve_forever())
+    finally:
+        mods.shutdown()
 
 
 if __name__ == "__main__":
