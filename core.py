@@ -23,6 +23,7 @@ MIRROR_TTL = 24 * 3600
 PROBE_TIMEOUT = 8
 RACE_TIMEOUT = 5
 PROBE_PACKAGE = "six"
+LOG_THROTTLE = 1.5
 
 
 class data:
@@ -97,10 +98,10 @@ class MirrorSelector:
                             return
                     if PROBE_PACKAGE.encode() not in body:
                         return
-                    with lock:
-                        if not win:
-                            win.append(url)
-                            done.set()
+                with lock:
+                    if not win:
+                        win.append(url)
+                        done.set()
             except Exception:
                 pass
 
@@ -156,21 +157,46 @@ class ModManager:
         python = self._venv_python(env_dir)
         if python and marker.exists() and marker.read_text(encoding="utf-8").strip() == digest:
             return python
-        if env_dir.exists():
-            self._rmtree(env_dir)
-        log.info(f"[{name}] 创建独立 venv: {env_dir}")
-        builder = venv.EnvBuilder(with_pip=True)
-        ctx = builder.ensure_directories(env_dir)
-        builder.create(env_dir)
-        python = ctx.env_exe
+        if not python:
+            if env_dir.exists():
+                self._rmtree(env_dir)
+            log.info(f"[{name}] 创建独立 venv: {env_dir}")
+            builder = venv.EnvBuilder(with_pip=True)
+            ctx = builder.ensure_directories(env_dir)
+            builder.create(env_dir)
+            python = ctx.env_exe
         cmd = [python, "-m", "pip", "install", "-r", str(req_file),
-               "--no-input", "--disable-pip-version-check"]
+               "--no-input", "--disable-pip-version-check", "--progress-bar", "off"]
         index = self.mirror.select()
         if index:
             cmd += ["-i", index]
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=PIP_TIMEOUT)
-        if r.returncode != 0:
-            raise RuntimeError(f"依赖安装失败:\n{(r.stderr or r.stdout)[-2000:]}")
+        log.info(f"[{name}] 开始安装依赖: {' '.join(req_file.read_text(encoding='utf-8').split())}")
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, encoding="utf-8", errors="replace",
+        )
+        key_lines = ("Collecting", "Downloading", "Using cached", "Building wheel",
+                     "Created wheel", "Installing", "Successfully installed")
+        tail = []
+        last_log = 0.0
+        try:
+            for line in proc.stdout: # type:ignore
+                line = line.rstrip()
+                if not line:
+                    continue
+                tail.append(line)
+                del tail[:-30]
+                now = time.monotonic()
+                force = line.startswith(key_lines) or "error" in line.lower()
+                if force or now - last_log >= LOG_THROTTLE:
+                    log.info(f"[{name}] pip: {line}")
+                    last_log = now
+            rc = proc.wait(timeout=PIP_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            raise RuntimeError(f"依赖安装超时({PIP_TIMEOUT}s)")
+        if rc != 0:
+            raise RuntimeError(f"依赖安装失败:\n" + "\n".join(tail[-15:]))
         marker.write_text(digest, encoding="utf-8")
         return python
 

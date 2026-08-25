@@ -95,7 +95,9 @@ Priority: `--index-url` argument > `PIP_INDEX_URL` environment variable > auto-p
 - A crashing or killed extension only affects itself; the framework logs it and keeps running
 - Events are delivered as JSON, so `evt.d` must be JSON-serializable
 - `print` output inside an extension is redirected to framework logs and never breaks inter-process communication
-- Async callbacks execute sequentially within each extension's own process
+- Events execute sequentially **in arrival order** on a dedicated dispatch thread inside each extension's process; callbacks may block freely — blocking only delays that extension's own subsequent events, never event reading or other extensions
+- `craftLinkInit` also goes through the dispatch queue, so it always runs before any other event; the registration handshake does not wait for init to finish, and an init failure is reported as a runtime error instead of failing registration
+- Sync and async callbacks (`async def craftLinkEvent`) both execute in order on the dispatch thread
 
 ## Receiving Events
 

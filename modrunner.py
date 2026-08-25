@@ -1,7 +1,9 @@
 import asyncio
 import importlib.util
 import json
+import queue
 import sys
+import threading
 import traceback
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -12,11 +14,15 @@ from core import data
 from moddata import open_mod_storage
 
 _out = None
+_emit_lock = threading.Lock()
+DISPATCH_JOIN_TIMEOUT = 2.5
 
 
 def emit(obj):
-    _out.write(json.dumps(obj, ensure_ascii=False) + "\n")
-    _out.flush()
+    line = json.dumps(obj, ensure_ascii=False) + "\n"
+    with _emit_lock:
+        _out.write(line)
+        _out.flush()
 
 
 class RunnerLogger:
@@ -68,36 +74,46 @@ def main():
         except Exception as e:
             emit({"type": "load_error", "error": f"{e}\n{traceback.format_exc()}"})
             return
-        try:
-            r = instance.craftLinkEvent(data("craftLinkInit", None))
-            if asyncio.iscoroutine(r):
-                asyncio.run(r)
-        except Exception as e:
-            emit({"type": "load_error", "error": f"{e}\n{traceback.format_exc()}"})
-            return
-        instance.logger.info(f"数据存储后端: {instance.data.backend}")
-        emit({"type": "hello", "name": name})
-        try:
-            for line in sys.stdin:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    msg = json.loads(line)
-                except ValueError:
-                    continue
-                evt = data(msg.get("t"), msg.get("d"))
+
+        def dispatch_loop():
+            while True:
+                item = q.get()
+                if item is None:
+                    return
+                evt = data(*item)
                 try:
                     r = instance.craftLinkEvent(evt)
                     if asyncio.iscoroutine(r):
                         asyncio.run(r)
                 except Exception:
                     emit({"type": "error", "tb": traceback.format_exc()})
-        finally:
+
+        q = queue.Queue()
+        q.put(("craftLinkInit", None))
+        worker = threading.Thread(target=dispatch_loop, daemon=True)
+        worker.start()
+        instance.logger.info(f"数据存储后端: {instance.data.backend}")
+        emit({"type": "hello", "name": name})
+        for line in sys.stdin:
+            line = line.strip()
+            if not line:
+                continue
             try:
-                instance.data.close()
-            except Exception:
-                pass
+                msg = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(msg, dict):
+                continue
+            q.put((msg.get("t"), msg.get("d")))
+        q.put(None)
+        worker.join(timeout=DISPATCH_JOIN_TIMEOUT)
+        if worker.is_alive():
+            instance.logger.warn("存在未返回的事件回调,跳过数据存储关闭")
+            return
+        try:
+            instance.data.close()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
