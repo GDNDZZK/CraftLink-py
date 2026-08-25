@@ -26,8 +26,8 @@ def obj_to_str(obj):
 
     The conversion follows this format:
     {
-        'type': <object_type>,
-        'data': <converted_data>
+        't': <object_type>,
+        'd': <converted_data>
     }
     where <object_type> can be 'set', 'list', 'dict', 'str', 'int', 'float', 'bool', 'None', or 'tuple'
 
@@ -45,28 +45,28 @@ def obj_to_str(obj):
     """
     def _convert(obj):
         if obj is None:
-            return {'type': 'None', 'data': None}
+            return {'t': 'N', 'd': None}
         elif type(obj) is bool:
-            return {'type': 'bool', 'data': obj}
+            return {'t': 'b', 'd': obj}
         elif type(obj) is int:
-            return {'type': 'int', 'data': obj}
+            return {'t': 'i', 'd': obj}
         elif type(obj) is float:
-            return {'type': 'float', 'data': obj}
+            return {'t': 'f', 'd': obj}
         elif type(obj) is str:
-            return {'type': 'str', 'data': obj}
+            return {'t': 's', 'd': obj}
         elif type(obj) is list:
-            return {'type': 'list', 'data': [_convert(item) for item in obj]}
+            return {'t': 'L', 'd': [_convert(item) for item in obj]}
         elif type(obj) is tuple:
-            return {'type': 'tuple', 'data': [_convert(item) for item in obj]}
+            return {'t': 'T', 'd': [_convert(item) for item in obj]}
         elif type(obj) is dict:
             return {
-                'type': 'dict',
-                'data': {k: _convert(v) for k, v in obj.items()}
+                't': 'D',
+                'd': {k: _convert(v) for k, v in obj.items()}
             }
         elif type(obj) is set:
             return {
-                'type': 'set',
-                'data': [_convert(item) for item in obj]
+                't': 'S',
+                'd': [_convert(item) for item in obj]
             }
         else:
             raise TypeError(f"Unsupported type: {type(obj)}")
@@ -92,25 +92,30 @@ def str_to_obj(json_str):
     """
 
     def _convert(d):
-        type_name = d['type']
-        data = d['data']
+        type_name = d['t']
+        data = d['d']
 
-        if type_name == 'None':
-            return None
-        elif type_name == 'bool':
-            return data
-        elif type_name in ('int', 'float'):
-            return int(data) if type_name == 'int' else float(data)
-        elif type_name == 'str':
-            return data
-        elif type_name in ('list', 'tuple', 'set'):
-            return [_convert(item) for item in data] if type_name == 'list' else \
-                tuple(_convert(item) for item in data) if type_name == 'tuple' else \
-                set(_convert(item) for item in data)
-        elif type_name == 'dict':
-            return {k: _convert(v) for k, v in data.items()}
-        else:
-            raise TypeError(f"Unsupported type in JSON: {type_name}")
+        match type_name:
+            case 'N':
+                return None
+            case 'b':
+                return data
+            case 'i':
+                return int(data)
+            case 'f':
+                return float(data)
+            case 's':
+                return data
+            case 'L':
+                return [_convert(item) for item in data]
+            case 'T':
+                return tuple(_convert(item) for item in data)
+            case 'S':
+                return set(_convert(item) for item in data)
+            case 'D':
+                return {k: _convert(v) for k, v in data.items()}
+            case _:
+                raise TypeError(f"Unsupported type in JSON: {type_name}")
 
     return _convert(json.loads(json_str))
 
