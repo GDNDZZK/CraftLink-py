@@ -9,6 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from core import data
+from moddata import open_mod_storage
 
 _out = None
 
@@ -63,6 +64,7 @@ def main():
             instance = cls()
             name = info.name
             instance.logger = RunnerLogger(name)
+            instance.data = open_mod_storage(mod_dir)
         except Exception as e:
             emit({"type": "load_error", "error": f"{e}\n{traceback.format_exc()}"})
             return
@@ -73,22 +75,29 @@ def main():
         except Exception as e:
             emit({"type": "load_error", "error": f"{e}\n{traceback.format_exc()}"})
             return
+        instance.logger.info(f"数据存储后端: {instance.data.backend}")
         emit({"type": "hello", "name": name})
-        for line in sys.stdin:
-            line = line.strip()
-            if not line:
-                continue
+        try:
+            for line in sys.stdin:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                except ValueError:
+                    continue
+                evt = data(msg.get("t"), msg.get("d"))
+                try:
+                    r = instance.craftLinkEvent(evt)
+                    if asyncio.iscoroutine(r):
+                        asyncio.run(r)
+                except Exception:
+                    emit({"type": "error", "tb": traceback.format_exc()})
+        finally:
             try:
-                msg = json.loads(line)
-            except ValueError:
-                continue
-            evt = data(msg.get("t"), msg.get("d"))
-            try:
-                r = instance.craftLinkEvent(evt)
-                if asyncio.iscoroutine(r):
-                    asyncio.run(r)
+                instance.data.close()
             except Exception:
-                emit({"type": "error", "tb": traceback.format_exc()})
+                pass
 
 
 if __name__ == "__main__":

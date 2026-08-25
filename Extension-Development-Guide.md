@@ -139,3 +139,32 @@ Output format:
 ```
 
 The log source is the `modsInfo.name` recorded by the framework at registration time, so it cannot be altered by extension code at runtime; do not construct your own `Logger` instead. Framework logs use `sys` as the source.
+
+## Data Storage
+
+Alongside `self.logger`, the framework injects `self.data` — a persistent key-value store for each extension that behaves like a dict:
+
+```python
+def craftLinkEvent(self, evt: data):
+    if evt.t == "craftLinkInit":
+        self.data["count"] = self.data.get("count", 0) + 1
+        self.logger.info(f"started {self.data['count']} times")
+
+    # common operations
+    self.data["k"] = {"a": 1, "tags": {"x", "y"}}   # set (nested complex types supported)
+    v = self.data["k"]                               # get, raises KeyError if missing
+    v = self.data.get("k", None)                     # get with default
+    del self.data["k"]                               # delete, raises KeyError if missing
+    "k" in self.data                                 # membership test
+    self.data.pop("k", None)                         # pop
+    len(self.data)                                   # number of entries
+    self.data.keys() / values() / items()            # iteration (generators)
+    self.data.clear()                                # wipe (irreversible)
+```
+
+- **Keys** must be `str`; **values** may be any nesting of `None/bool/int/float/str/list/tuple/dict/set`
+- Data lives under `datas/<mod-dir-name>/` in the project root, a sibling of `.venvs` named after the mod directory, just like venvs. Data directories are **not** cleaned up when an extension is removed — reinstalling an extension with the same directory name restores its data
+- The backend is plyvel (LevelDB) when available, with automatic fallback to SQLite otherwise; both backends share identical behavior and on-disk format. Query `self.data.backend` (`"plyvel"`/`"sqlite"`) to see which one is active
+- To get the LevelDB backend, list `plyvel` in your own `requirements.txt` (note that plyvel is unavailable on Windows)
+- Storage implementation comes from [httpLevelDB](https://gitee.com/gdndzzk/httpLevelDB/tree/master/Util) (WTFPL)
+- The framework closes the store automatically when the extension process exits
