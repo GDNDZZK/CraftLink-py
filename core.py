@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import urllib.request
 import venv
 from pathlib import Path
@@ -202,7 +203,7 @@ class ModManager:
 
     @staticmethod
     def _venv_python(env_dir):
-        exe = env_dir / ("Scripts" / "python.exe" if os.name == "nt" else Path("bin") / "python")
+        exe = env_dir / (Path("Scripts") / "python.exe" if os.name == "nt" else Path("bin") / "python")
         return str(exe) if exe.exists() else None
 
     def _load(self, path):
@@ -218,7 +219,7 @@ class ModManager:
             else:
                 python = sys.executable
         except Exception as e:
-            log.err(f"[{name}] 依赖准备失败: {e}")
+            log.err(f"[{name}] 依赖准备失败: {e}\n{traceback.format_exc()}")
             return
         try:
             proc = subprocess.Popen(
@@ -231,7 +232,7 @@ class ModManager:
                 env={**os.environ, "PYTHONUNBUFFERED": "1"},
             )
         except Exception as e:
-            log.err(f"[{name}] 子进程启动失败: {e}")
+            log.err(f"[{name}] 子进程启动失败: {e}\n{traceback.format_exc()}")
             return
         q = queue.Queue()
         threading.Thread(target=self._reader, args=(proc, q), daemon=True).start()
